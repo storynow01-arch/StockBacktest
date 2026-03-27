@@ -5,6 +5,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { ALL_DATA } from './data';
+import { INDICATOR_DATA } from './indicatorData';
 import {
   ComposedChart, Line, Scatter, AreaChart, Area, BarChart, Bar, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -12,7 +13,9 @@ import {
 
 const BUY_FEE_RATE = 0.00035625;
 const SELL_FEE_TAX_RATE = 0.00335625;
-const UNITS = 100;
+const TOTAL_CAPITAL = 1000000;
+const MAX_GRIDS = 100;
+const CAPITAL_PER_GRID = TOTAL_CAPITAL / MAX_GRIDS;
 
 function getRangeData(startYear: string, endYear: string) {
   const s = Math.min(parseInt(startYear), parseInt(endYear));
@@ -59,12 +62,96 @@ export default function App() {
     let noPosiHighWater = base.p;
     let totalRealized = 0;
     let totalCostPaid = 0;
-    let maxInvestedCapital = 0;
+    let maxInvestedCapital = 0; // Will be calculated differently now
+
+    let indUnits = 0;
+    let indAvgCost = 0;
+    let indRealizedPnL = 0;
+    let indBuyCount = 0;
+    let indSellCount = 0;
+    const indBuyPts: any[] = [];
+    const indSellPts: any[] = [];
+    let lastMonth = '';
+    const indDailyLog: any[] = [];
+
+    let availableCapital = TOTAL_CAPITAL;
+    let minAvailableCapital = TOTAL_CAPITAL;
 
     for (let i = 0; i < rangeData.length; i++) {
       const { d, p } = rangeData[i];
-      let dayBuys: number[] = [];
-      let daySells: any[] = [];
+      const currentMonth = d.substring(0, 7);
+      
+      if (lastMonth !== '' && currentMonth !== lastMonth) {
+        const indicator = INDICATOR_DATA[lastMonth];
+        if (indicator) {
+          if (indicator.light === '藍燈') {
+            const targetAmount = TOTAL_CAPITAL / 10;
+            const costPerUnit = p * (1 + BUY_FEE_RATE);
+            const maxUnitsCanBuy = Math.floor(availableCapital / costPerUnit);
+            const targetUnits = Math.floor(targetAmount / p);
+            const unitsToBuy = Math.min(maxUnitsCanBuy, targetUnits);
+            
+            if (unitsToBuy > 0) {
+              const cost = unitsToBuy * p;
+              const fee = cost * BUY_FEE_RATE;
+              availableCapital -= (cost + fee);
+              minAvailableCapital = Math.min(minAvailableCapital, availableCapital);
+              
+              const totalCostBefore = indUnits * indAvgCost;
+              indUnits += unitsToBuy;
+              indAvgCost = (totalCostBefore + cost + fee) / indUnits;
+              indBuyCount++;
+              indBuyPts.push({ x: i, y: p, d, units: unitsToBuy });
+              
+              indDailyLog.push({
+                d, p, action: '買入', units: unitsToBuy,
+                cost: cost + fee,
+                realized: 0,
+                cumPnl: indRealizedPnL,
+                holdUnits: indUnits,
+                notes: `燈號藍燈買入 (${unitsToBuy}股)`
+              });
+            } else {
+               indDailyLog.push({
+                d, p, action: '略過', units: 0,
+                cost: 0, realized: 0, cumPnl: indRealizedPnL, holdUnits: indUnits,
+                notes: `燈號藍燈觸發，但資金池不足`
+              });
+            }
+          } else if (indicator.light === '紅燈') {
+            if (indUnits > 0) {
+              const unitsToSell = Math.floor(indUnits / 5);
+              if (unitsToSell > 0) {
+                const gross = unitsToSell * p;
+                const fee = gross * SELL_FEE_TAX_RATE;
+                const net = gross - fee;
+                
+                availableCapital += net;
+                
+                const costOfSold = unitsToSell * indAvgCost;
+                const realized = net - costOfSold;
+                indRealizedPnL += realized;
+                indUnits -= unitsToSell;
+                indSellCount++;
+                indSellPts.push({ x: i, y: p, d, units: unitsToSell });
+                
+                indDailyLog.push({
+                  d, p, action: '賣出', units: unitsToSell,
+                  cost: costOfSold,
+                  realized: realized,
+                  cumPnl: indRealizedPnL,
+                  holdUnits: indUnits,
+                  notes: `燈號紅燈賣出 (${unitsToSell}股)`
+                });
+              }
+            }
+          }
+        }
+      }
+      lastMonth = currentMonth;
+
+      let dayBuys: {p: number, units: number}[] = [];
+      let daySells: {price: number, pos: any}[] = [];
       let dayNotes: string[] = [];
       let dayBuyIds: number[] = [];
       let stepPnl = 0;
@@ -73,26 +160,54 @@ export default function App() {
       if (!hasPos) {
         noPosiHighWater = Math.max(noPosiHighWater, p);
         const drop = (noPosiHighWater - p) / noPosiHighWater;
-        if (drop >= buyThreshold) {
-          const newPosId = ++posId;
-          positions.push({ id: newPosId, buyDate: d, buyPrice: p, units: UNITS });
-          lastBuyRef = p;
-          noPosiHighWater = p;
-          dayBuys.push(p);
-          dayBuyIds.push(newPosId);
-          buyPts.push({ x: i, y: p, d });
-          dayNotes.push(`空倉高點回跌觸發 (#${newPosId})`);
+        if (drop >= buyThreshold && positions.length < MAX_GRIDS) {
+          const costPerUnit = p * (1 + BUY_FEE_RATE);
+          const maxUnitsCanBuy = Math.floor(availableCapital / costPerUnit);
+          const targetUnits = Math.floor(CAPITAL_PER_GRID / p);
+          const units = Math.min(maxUnitsCanBuy, targetUnits);
+          
+          if (units > 0) {
+            const cost = units * p;
+            const fee = cost * BUY_FEE_RATE;
+            availableCapital -= (cost + fee);
+            minAvailableCapital = Math.min(minAvailableCapital, availableCapital);
+            
+            const newPosId = ++posId;
+            positions.push({ id: newPosId, buyDate: d, buyPrice: p, units });
+            lastBuyRef = p;
+            noPosiHighWater = p;
+            dayBuys.push({p, units});
+            dayBuyIds.push(newPosId);
+            buyPts.push({ x: i, y: p, d });
+            dayNotes.push(`空倉高點回跌觸發 (#${newPosId})`);
+          } else {
+            dayNotes.push(`空倉回跌觸發，但資金不足`);
+          }
         }
       } else {
         const drop = (lastBuyRef - p) / lastBuyRef;
-        if (drop >= buyThreshold) {
-          const newPosId = ++posId;
-          positions.push({ id: newPosId, buyDate: d, buyPrice: p, units: UNITS });
-          lastBuyRef = p;
-          dayBuys.push(p);
-          dayBuyIds.push(newPosId);
-          buyPts.push({ x: i, y: p, d });
-          dayNotes.push(`跌幅達門檻加碼 (#${newPosId})`);
+        if (drop >= buyThreshold && positions.length < MAX_GRIDS) {
+          const costPerUnit = p * (1 + BUY_FEE_RATE);
+          const maxUnitsCanBuy = Math.floor(availableCapital / costPerUnit);
+          const targetUnits = Math.floor(CAPITAL_PER_GRID / p);
+          const units = Math.min(maxUnitsCanBuy, targetUnits);
+          
+          if (units > 0) {
+            const cost = units * p;
+            const fee = cost * BUY_FEE_RATE;
+            availableCapital -= (cost + fee);
+            minAvailableCapital = Math.min(minAvailableCapital, availableCapital);
+            
+            const newPosId = ++posId;
+            positions.push({ id: newPosId, buyDate: d, buyPrice: p, units });
+            lastBuyRef = p;
+            dayBuys.push({p, units});
+            dayBuyIds.push(newPosId);
+            buyPts.push({ x: i, y: p, d });
+            dayNotes.push(`跌幅達門檻加碼 (#${newPosId})`);
+          } else {
+            dayNotes.push(`跌幅達門檻，但資金不足`);
+          }
         }
       }
 
@@ -104,6 +219,10 @@ export default function App() {
           const buyFee = pos.buyPrice * pos.units * BUY_FEE_RATE;
           const sellFee = p * pos.units * SELL_FEE_TAX_RATE;
           const netPnl = grossPnl - buyFee - sellFee;
+          
+          const grossRev = p * pos.units;
+          const netRev = grossRev - sellFee;
+          availableCapital += netRev;
           
           totalRealized += netPnl;
           stepPnl += netPnl;
@@ -121,8 +240,7 @@ export default function App() {
       }
       positions = kept;
       
-      const currentInvested = positions.reduce((sum, pos) => sum + pos.buyPrice * pos.units, 0);
-      maxInvestedCapital = Math.max(maxInvestedCapital, currentInvested);
+      maxInvestedCapital = TOTAL_CAPITAL - minAvailableCapital;
       
       if (positions.length > 0) {
         lastBuyRef = Math.min(...positions.map(x => x.buyPrice));
@@ -134,16 +252,16 @@ export default function App() {
       holdSeries.push({ d, n: positions.length });
 
       if (dayBuys.length > 0 || daySells.length > 0) {
-        const avgBuy = dayBuys.length > 0 ? dayBuys.reduce((a, b) => a + b, 0) / dayBuys.length : null;
-        const avgSell = daySells.length > 0 ? daySells.reduce((a, b) => a + b.price, 0) / daySells.length : null;
+        const avgBuy = dayBuys.length > 0 ? dayBuys.reduce((a, b) => a + b.p * b.units, 0) / dayBuys.reduce((a, b) => a + b.units, 0) : null;
+        const avgSell = daySells.length > 0 ? daySells.reduce((a, b) => a + b.price * b.pos.units, 0) / daySells.reduce((a, b) => a + b.pos.units, 0) : null;
         const action = dayBuys.length > 0 && daySells.length > 0 ? '買+賣' : dayBuys.length > 0 ? '買入' : '賣出';
         
         dailyLog.push({
           d, p, action, 
-          buyUnits: dayBuys.length * UNITS, 
-          sellUnits: daySells.length * UNITS,
+          buyUnits: dayBuys.reduce((a, b) => a + b.units, 0), 
+          sellUnits: daySells.reduce((a, b) => a + b.pos.units, 0),
           avgBuy, avgSell, stepPnl, cumPnl: totalRealized, 
-          holdUnits: positions.length * UNITS, 
+          holdUnits: positions.reduce((a, b) => a + b.units, 0), 
           notes: dayNotes.join(' | '),
           buyPosIds: dayBuyIds
         });
@@ -161,18 +279,18 @@ export default function App() {
     const totalPnL = totalRealized + unrealizedFinal;
     const totalInvested = positions.reduce((s, pos) => pos.buyPrice * pos.units + s, 0);
     
-    const denom = maxInvestedCapital > 0 ? maxInvestedCapital : 1;
-    const realizedPct = maxInvestedCapital > 0 ? ((totalRealized / denom) * 100).toFixed(2) + '%' : '—';
-    const unrealizedPct = maxInvestedCapital > 0 ? ((unrealizedFinal / denom) * 100).toFixed(2) + '%' : '—';
-    const totalPnLPct = maxInvestedCapital > 0 ? ((totalPnL / denom) * 100).toFixed(2) + '%' : '—';
+    const denom = TOTAL_CAPITAL;
+    const realizedPct = ((totalRealized / denom) * 100).toFixed(2) + '%';
+    const unrealizedPct = ((unrealizedFinal / denom) * 100).toFixed(2) + '%';
+    const totalPnLPct = ((totalPnL / denom) * 100).toFixed(2) + '%';
 
-    const bhUnits = maxInvestedCapital > 0 ? maxInvestedCapital / base.p : 0;
-    const bhBuyFee = maxInvestedCapital * BUY_FEE_RATE;
+    const bhUnits = TOTAL_CAPITAL / base.p;
+    const bhBuyFee = TOTAL_CAPITAL * BUY_FEE_RATE;
     const bhGrossValue = bhUnits * finalP;
     const bhSellFee = bhGrossValue * SELL_FEE_TAX_RATE;
-    const bhNetPnl = maxInvestedCapital > 0 ? bhGrossValue - maxInvestedCapital - bhBuyFee - bhSellFee : 0;
-    const bhPct = maxInvestedCapital > 0 ? (bhNetPnl / maxInvestedCapital) * 100 : 0;
-    const bhPctStr = maxInvestedCapital > 0 ? bhPct.toFixed(2) + '%' : '—';
+    const bhNetPnl = bhGrossValue - TOTAL_CAPITAL - bhBuyFee - bhSellFee;
+    const bhPct = (bhNetPnl / TOTAL_CAPITAL) * 100;
+    const bhPctStr = bhPct.toFixed(2) + '%';
 
     const openPosMap = new Map(positions.map(pos => {
       const gross = (finalP - pos.buyPrice) * pos.units;
@@ -202,6 +320,25 @@ export default function App() {
       return log;
     }).reverse();
 
+    const indFinalPrice = rangeData[rangeData.length - 1].p;
+    const indUnrealizedGross = indUnits * indFinalPrice;
+    const indUnrealizedFee = indUnrealizedGross * SELL_FEE_TAX_RATE;
+    const indUnrealizedNet = indUnrealizedGross - indUnrealizedFee;
+    const indUnrealizedPnL = indUnits > 0 ? indUnrealizedNet - (indUnits * indAvgCost) : 0;
+    const indTotalPnL = indRealizedPnL + indUnrealizedPnL;
+    
+    const indMetrics = {
+      units: indUnits,
+      avgCost: indAvgCost,
+      realizedPnL: indRealizedPnL,
+      unrealizedPnL: indUnrealizedPnL,
+      totalPnL: indTotalPnL,
+      totalPnLPct: ((indTotalPnL / TOTAL_CAPITAL) * 100).toFixed(2) + '%',
+      buyCount: indBuyCount,
+      sellCount: indSellCount,
+      invested: indUnits * indAvgCost,
+    };
+
     const metrics = {
       baseDate: base.d,
       basePrice: base.p,
@@ -224,11 +361,15 @@ export default function App() {
     const priceChartData = rangeData.map((d, i) => {
       const isBuy = buyPts.find(b => b.x === i);
       const isSell = sellPts.find(s => s.x === i);
+      const isIndBuy = indBuyPts.find(b => b.x === i);
+      const isIndSell = indSellPts.find(s => s.x === i);
       return {
         name: d.d,
         price: d.p,
         buy: isBuy ? d.p : null,
         sell: isSell ? d.p : null,
+        indBuy: isIndBuy ? d.p : null,
+        indSell: isIndSell ? d.p : null,
       };
     });
 
@@ -247,12 +388,16 @@ export default function App() {
       ...positions.map(p => ({ ...p, sellDate: null, sellPrice: null, pnl: null, pct: null }))
     ].sort((a, b) => a.buyDate.localeCompare(b.buyDate));
 
-    return { metrics, priceChartData, holdSeries, monthlyData, allPos, dailyLog: processedDailyLog, finalP };
+    const indicatorRange = Object.keys(INDICATOR_DATA)
+      .filter(k => k >= `${Math.min(parseInt(startYear), parseInt(endYear))}-01` && k <= `${Math.max(parseInt(startYear), parseInt(endYear))}-12`)
+      .map(k => ({ month: k, ...INDICATOR_DATA[k] }));
+
+    return { metrics, priceChartData, holdSeries, monthlyData, allPos, dailyLog: processedDailyLog, finalP, indicatorRange, indMetrics, indDailyLog: indDailyLog.reverse() };
   }, [startYear, endYear, buyThreshold, sellThreshold]);
 
   if (!simResult) return <div className="p-8 text-center text-slate-400 min-h-screen bg-slate-900">資料不足</div>;
 
-  const { metrics, priceChartData, holdSeries, monthlyData, allPos, dailyLog } = simResult;
+  const { metrics, priceChartData, holdSeries, monthlyData, allPos, dailyLog, indicatorRange, indMetrics, indDailyLog } = simResult;
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-200 font-sans">
@@ -261,7 +406,7 @@ export default function App() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-xl font-medium mb-1">00631L 網格交易回測 v3 (含交易成本)</h1>
-            <p className="text-sm text-slate-400">每單位100股 · 基準 {metrics.baseDate} 收盤 ${metrics.basePrice.toFixed(2)} · 總成本率 0.37125%</p>
+            <p className="text-sm text-slate-400">總資金 100萬 · 最大 100格 · 基準 {metrics.baseDate} 收盤 ${metrics.basePrice.toFixed(2)} · 總成本率 0.37125%</p>
           </div>
           <div className="flex flex-wrap gap-2 items-center">
             <div className="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-md px-2">
@@ -288,19 +433,57 @@ export default function App() {
           </div>
         </div>
 
-        {/* Metrics */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-          <MetricCard label="基準價" value={`$${metrics.basePrice.toFixed(2)}`} />
-          <MetricCard label="期末收盤" value={`$${metrics.finalPrice.toFixed(2)}`} />
-          <MetricCard label="最大投入資金" value={`$${Math.round(metrics.maxInvestedCapital).toLocaleString()}`} color="text-blue-400" />
-          <MetricCard label="期末持倉" value={`${metrics.currentPositions} 單位`} />
-          <MetricCard label="期末佔用資金" value={`$${Math.round(metrics.totalInvested).toLocaleString()}`} />
-          
-          <MetricCard label="已實現損益" value={`$${Math.round(metrics.totalRealized).toLocaleString()}`} sub={`(${metrics.realizedPct})`} color={metrics.totalRealized >= 0 ? 'text-red-400' : 'text-green-400'} />
-          <MetricCard label="未實現損益" value={`$${Math.round(metrics.unrealizedFinal).toLocaleString()}`} sub={`(${metrics.unrealizedPct})`} color={metrics.unrealizedFinal >= 0 ? 'text-red-400' : 'text-green-400'} />
-          <MetricCard label="總損益" value={`$${Math.round(metrics.totalPnL).toLocaleString()}`} sub={`(${metrics.totalPnLPct})`} color={metrics.totalPnL >= 0 ? 'text-red-400' : 'text-green-400'} />
-          <MetricCard label="完成筆數" value={`${metrics.completedCount} 筆`} />
-          <MetricCard label="買進持有損益(對比)" value={`$${Math.round(metrics.bhNetPnl).toLocaleString()}`} sub={`(${metrics.bhPctStr})`} color={metrics.bhNetPnl >= 0 ? 'text-red-400' : 'text-green-400'} />
+        {/* Grid Metrics */}
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-sm mb-4">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="text-sm font-medium text-slate-400">網格交易策略</h3>
+            <div className="text-xs font-medium bg-slate-700 px-2 py-1 rounded text-slate-300">
+              剩餘可用資金: <span className="text-white">${Math.round(TOTAL_CAPITAL - metrics.maxInvestedCapital).toLocaleString()}</span>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <MetricCard label="基準價" value={`$${metrics.basePrice.toFixed(2)}`} />
+            <MetricCard label="期末收盤" value={`$${metrics.finalPrice.toFixed(2)}`} />
+            <MetricCard label="總投入資金" value={`$${Math.round(TOTAL_CAPITAL).toLocaleString()}`} color="text-blue-400" />
+            <MetricCard label="最大動用資金" value={`$${Math.round(metrics.maxInvestedCapital).toLocaleString()}`} />
+            <MetricCard label="期末持倉" value={`${metrics.currentPositions} 格`} />
+            <MetricCard label="期末佔用資金" value={`$${Math.round(metrics.totalInvested).toLocaleString()}`} />
+            
+            <MetricCard label="已實現損益" value={`$${Math.round(metrics.totalRealized).toLocaleString()}`} sub={`(${metrics.realizedPct})`} color={metrics.totalRealized >= 0 ? 'text-red-400' : 'text-green-400'} />
+            <MetricCard label="未實現損益" value={`$${Math.round(metrics.unrealizedFinal).toLocaleString()}`} sub={`(${metrics.unrealizedPct})`} color={metrics.unrealizedFinal >= 0 ? 'text-red-400' : 'text-green-400'} />
+            <MetricCard label="總損益" value={`$${Math.round(metrics.totalPnL).toLocaleString()}`} sub={`(${metrics.totalPnLPct})`} color={metrics.totalPnL >= 0 ? 'text-red-400' : 'text-green-400'} />
+            <MetricCard label="完成筆數" value={`${metrics.completedCount} 筆`} />
+            <MetricCard label="買進持有損益(對比)" value={`$${Math.round(metrics.bhNetPnl).toLocaleString()}`} sub={`(${metrics.bhPctStr})`} color={metrics.bhNetPnl >= 0 ? 'text-red-400' : 'text-green-400'} />
+          </div>
+        </div>
+
+        {/* Indicator Metrics */}
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-sm mb-4">
+          <h3 className="text-sm font-medium text-slate-400 mb-3">景氣燈號策略 (藍燈買10%、紅燈賣20%)</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+            <MetricCard label="期末持倉" value={`${indMetrics.units} 股`} />
+            <MetricCard label="持倉均價" value={`$${indMetrics.avgCost.toFixed(2)}`} />
+            <MetricCard label="期末佔用資金" value={`$${Math.round(indMetrics.invested).toLocaleString()}`} />
+            <MetricCard label="已實現損益" value={`$${Math.round(indMetrics.realizedPnL).toLocaleString()}`} color={indMetrics.realizedPnL >= 0 ? 'text-red-400' : 'text-green-400'} />
+            <MetricCard label="未實現損益" value={`$${Math.round(indMetrics.unrealizedPnL).toLocaleString()}`} color={indMetrics.unrealizedPnL >= 0 ? 'text-red-400' : 'text-green-400'} />
+            <MetricCard label="總損益" value={`$${Math.round(indMetrics.totalPnL).toLocaleString()}`} sub={`(${indMetrics.totalPnLPct})`} color={indMetrics.totalPnL >= 0 ? 'text-red-400' : 'text-green-400'} />
+            <MetricCard label="買入次數" value={`${indMetrics.buyCount} 次`} />
+            <MetricCard label="賣出次數" value={`${indMetrics.sellCount} 次`} />
+          </div>
+        </div>
+
+        {/* Indicators */}
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-sm">
+          <h3 className="text-sm font-medium text-slate-400 mb-4">景氣對策燈號 ({Math.min(parseInt(startYear), parseInt(endYear))} - {Math.max(parseInt(startYear), parseInt(endYear))})</h3>
+          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
+            {indicatorRange.map(ind => (
+              <div key={ind.month} className="flex flex-col items-center min-w-[60px] p-2 bg-slate-900 rounded-lg border border-slate-700 shrink-0">
+                <span className="text-[10px] text-slate-400 mb-1">{ind.month.substring(2).replace('-', '/')}</span>
+                <div className={`w-4 h-4 rounded-full ${ind.color} mb-1 shadow-sm`} title={ind.light}></div>
+                <span className="text-xs font-medium text-slate-200">{ind.score}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
       {/* Charts Row 1 */}
@@ -315,8 +498,10 @@ export default function App() {
                 <YAxis domain={['auto', 'auto']} tickFormatter={v => `$${v}`} tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                 <Tooltip contentStyle={{ backgroundColor: '#1e293b', color: '#f1f5f9', fontSize: '12px', borderRadius: '8px', border: '1px solid #334155', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                 <Line type="monotone" dataKey="price" stroke="#60a5fa" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-                <Scatter dataKey="buy" fill="#f87171" shape="triangle" isAnimationActive={false} />
-                <Scatter dataKey="sell" fill="#4ade80" shape="square" isAnimationActive={false} />
+                <Scatter dataKey="buy" fill="#f87171" shape="triangle" isAnimationActive={false} name="網格買" />
+                <Scatter dataKey="sell" fill="#4ade80" shape="square" isAnimationActive={false} name="網格賣" />
+                <Scatter dataKey="indBuy" fill="#3b82f6" shape="triangle" isAnimationActive={false} name="燈號買" />
+                <Scatter dataKey="indSell" fill="#f97316" shape="square" isAnimationActive={false} name="燈號賣" />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -420,10 +605,11 @@ export default function App() {
       </div>
 
       {/* Log Table */}
-      <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-sm">
-        <h3 className="text-sm font-medium text-slate-400 mb-4">每日事件日誌</h3>
-        <div className="overflow-y-auto max-h-64">
-          <table className="w-full text-xs text-left whitespace-nowrap">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-sm">
+          <h3 className="text-sm font-medium text-slate-400 mb-4">網格策略每日事件日誌</h3>
+          <div className="overflow-y-auto max-h-64">
+            <table className="w-full text-xs text-left whitespace-nowrap">
             <thead className="sticky top-0 bg-slate-800 text-slate-400 border-b border-slate-700">
               <tr>
                 <th className="py-2 px-2 font-medium">日期</th>
@@ -478,12 +664,61 @@ export default function App() {
           </table>
         </div>
       </div>
-      
-      <div className="text-[11px] text-slate-500 mt-2">
-        每單位=100股。總交易成本率 0.37125% (買進 0.035625% + 賣出 0.035625% + 證交稅 0.3%)。價格為近似重建值，僅供策略邏輯驗證，非投資建議。
-      </div>
+
+      <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-sm">
+        <h3 className="text-sm font-medium text-slate-400 mb-4">景氣燈號策略交易日誌</h3>
+        <div className="overflow-y-auto max-h-64">
+          <table className="w-full text-xs text-left whitespace-nowrap">
+            <thead className="sticky top-0 bg-slate-800 text-slate-400 border-b border-slate-700">
+              <tr>
+                <th className="py-2 px-2 font-medium">日期</th>
+                <th className="py-2 px-2 font-medium">收盤價</th>
+                <th className="py-2 px-2 font-medium">動作</th>
+                <th className="py-2 px-2 font-medium">股數</th>
+                <th className="py-2 px-2 font-medium">本次損益</th>
+                <th className="py-2 px-2 font-medium">累計損益</th>
+                <th className="py-2 px-2 font-medium">持倉(股)</th>
+                <th className="py-2 px-2 font-medium">備註</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-700/50">
+              {indDailyLog.map((l, i) => {
+                const actionTag = l.action === '買入' ? 
+                  <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-900/30 text-blue-400">買入</span> : 
+                  <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-900/30 text-red-400">賣出</span>;
+                
+                const stepPnlColor = l.realized > 0 ? 'text-red-400' : l.realized < 0 ? 'text-green-400' : '';
+                const cumPnlColor = l.cumPnl >= 0 ? 'text-red-400' : 'text-green-400';
+                
+                return (
+                  <tr key={i} className="hover:bg-slate-700/50">
+                    <td className="py-2 px-2">{l.d.substring(5)}</td>
+                    <td className="py-2 px-2">${l.p.toFixed(2)}</td>
+                    <td className="py-2 px-2">{actionTag}</td>
+                    <td className="py-2 px-2">{l.action === '買入' ? '+' : '-'}{l.units}</td>
+                    <td className={`py-2 px-2 ${stepPnlColor}`}>{l.realized !== 0 ? (l.realized > 0 ? '+' : '') + Math.round(l.realized) : '—'}</td>
+                    <td className={`py-2 px-2 ${cumPnlColor}`}>{l.cumPnl >= 0 ? '+' : ''}{Math.round(l.cumPnl)}</td>
+                    <td className="py-2 px-2">{l.holdUnits}</td>
+                    <td className="py-2 px-2 text-slate-400">{l.notes}</td>
+                  </tr>
+                );
+              })}
+              {indDailyLog.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="py-4 text-center text-slate-500">尚無交易紀錄</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
+    
+    <div className="text-[11px] text-slate-500 mt-2">
+      每格資金約1萬元。總交易成本率 0.37125% (買進 0.035625% + 賣出 0.035625% + 證交稅 0.3%)。價格為近似重建值，僅供策略邏輯驗證，非投資建議。
+    </div>
+  </div>
+</div>
   );
 }
 
