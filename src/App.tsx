@@ -38,7 +38,7 @@ function MetricCard({ label, value, sub, color = 'text-slate-100' }: { label: st
 }
 
 export default function App() {
-  const [startYear, setStartYear] = useState('2020');
+  const [startYear, setStartYear] = useState('2010');
   const [endYear, setEndYear] = useState('2026');
   const [buyThreshold, setBuyThreshold] = useState(0.01);
   const [sellThreshold, setSellThreshold] = useState(0.01);
@@ -446,15 +446,16 @@ export default function App() {
           <div>
             <h1 className="text-xl font-medium mb-1">00631L 網格交易回測 v3 (含交易成本)</h1>
             <p className="text-sm text-slate-400">總資金 100萬 · 最大 100格 · 基準 {metrics.baseDate} 收盤 ${metrics.basePrice.toFixed(2)} · 總成本率 0.37125%</p>
+            <p className="text-xs text-slate-500 mt-1">* 註：00631L 於 2014 年 10 月 23 日上市，若選擇更早的年份，資料將從上市日開始計算。</p>
           </div>
           <div className="flex flex-wrap gap-2 items-center">
             <div className="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-md px-2">
               <select className="py-1.5 text-sm bg-transparent outline-none cursor-pointer text-slate-200" value={startYear} onChange={e => setStartYear(e.target.value)}>
-                {['2020','2021','2022','2023','2024','2025','2026'].map(y => <option key={y} value={y} className="bg-slate-800">{y}年</option>)}
+                {['2010','2011','2012','2013','2014','2015','2016','2017','2018','2019','2020','2021','2022','2023','2024','2025','2026'].map(y => <option key={y} value={y} className="bg-slate-800">{y}年</option>)}
               </select>
               <span className="text-slate-500 text-sm">至</span>
               <select className="py-1.5 text-sm bg-transparent outline-none cursor-pointer text-slate-200" value={endYear} onChange={e => setEndYear(e.target.value)}>
-                {['2020','2021','2022','2023','2024','2025','2026'].map(y => <option key={y} value={y} className="bg-slate-800">{y}年</option>)}
+                {['2010','2011','2012','2013','2014','2015','2016','2017','2018','2019','2020','2021','2022','2023','2024','2025','2026'].map(y => <option key={y} value={y} className="bg-slate-800">{y}年</option>)}
               </select>
             </div>
             <select className="px-3 py-1.5 border border-slate-700 rounded-md text-sm bg-slate-800 text-slate-200" value={buyThreshold} onChange={e => setBuyThreshold(parseFloat(e.target.value))}>
