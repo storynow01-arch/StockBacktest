@@ -22,10 +22,10 @@ function getRangeData(startYear: string, endYear: string) {
   return ALL_DATA.filter(x => x.d >= from && x.d <= to);
 }
 
-function MetricCard({ label, value, sub, color = 'text-slate-900' }: { label: string, value: string, sub?: string, color?: string }) {
+function MetricCard({ label, value, sub, color = 'text-slate-100' }: { label: string, value: string, sub?: string, color?: string }) {
   return (
-    <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
-      <div className="text-xs text-slate-500 mb-1">{label}</div>
+    <div className="bg-slate-800 rounded-lg p-3 border border-slate-700">
+      <div className="text-xs text-slate-400 mb-1">{label}</div>
       <div className={`text-base font-medium ${color}`}>
         {value}
         {sub && <span className="text-xs ml-1 font-normal">{sub}</span>}
@@ -250,86 +250,87 @@ export default function App() {
     return { metrics, priceChartData, holdSeries, monthlyData, allPos, dailyLog: processedDailyLog, finalP };
   }, [startYear, endYear, buyThreshold, sellThreshold]);
 
-  if (!simResult) return <div className="p-8 text-center text-slate-500">資料不足</div>;
+  if (!simResult) return <div className="p-8 text-center text-slate-400 min-h-screen bg-slate-900">資料不足</div>;
 
   const { metrics, priceChartData, holdSeries, monthlyData, allPos, dailyLog } = simResult;
 
   return (
-    <div className="p-4 max-w-7xl mx-auto space-y-6 text-slate-800 font-sans">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-xl font-medium mb-1">00631L 網格交易回測 v3 (含交易成本)</h1>
-          <p className="text-sm text-slate-500">每單位100股 · 基準 {metrics.baseDate} 收盤 ${metrics.basePrice.toFixed(2)} · 總成本率 0.37125%</p>
-        </div>
-        <div className="flex flex-wrap gap-2 items-center">
-          <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-md px-2">
-            <select className="py-1.5 text-sm bg-transparent outline-none cursor-pointer" value={startYear} onChange={e => setStartYear(e.target.value)}>
-              {['2020','2021','2022','2023','2024','2025','2026'].map(y => <option key={y} value={y}>{y}年</option>)}
+    <div className="min-h-screen bg-slate-900 text-slate-200 font-sans">
+      <div className="p-4 max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h1 className="text-xl font-medium mb-1">00631L 網格交易回測 v3 (含交易成本)</h1>
+            <p className="text-sm text-slate-400">每單位100股 · 基準 {metrics.baseDate} 收盤 ${metrics.basePrice.toFixed(2)} · 總成本率 0.37125%</p>
+          </div>
+          <div className="flex flex-wrap gap-2 items-center">
+            <div className="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-md px-2">
+              <select className="py-1.5 text-sm bg-transparent outline-none cursor-pointer text-slate-200" value={startYear} onChange={e => setStartYear(e.target.value)}>
+                {['2020','2021','2022','2023','2024','2025','2026'].map(y => <option key={y} value={y} className="bg-slate-800">{y}年</option>)}
+              </select>
+              <span className="text-slate-500 text-sm">至</span>
+              <select className="py-1.5 text-sm bg-transparent outline-none cursor-pointer text-slate-200" value={endYear} onChange={e => setEndYear(e.target.value)}>
+                {['2020','2021','2022','2023','2024','2025','2026'].map(y => <option key={y} value={y} className="bg-slate-800">{y}年</option>)}
+              </select>
+            </div>
+            <select className="px-3 py-1.5 border border-slate-700 rounded-md text-sm bg-slate-800 text-slate-200" value={buyThreshold} onChange={e => setBuyThreshold(parseFloat(e.target.value))}>
+              <option value="0.01">跌1%買入</option>
+              <option value="0.02">跌2%買入</option>
+              <option value="0.03">跌3%買入</option>
+              <option value="0.05">跌5%買入</option>
             </select>
-            <span className="text-slate-400 text-sm">至</span>
-            <select className="py-1.5 text-sm bg-transparent outline-none cursor-pointer" value={endYear} onChange={e => setEndYear(e.target.value)}>
-              {['2020','2021','2022','2023','2024','2025','2026'].map(y => <option key={y} value={y}>{y}年</option>)}
+            <select className="px-3 py-1.5 border border-slate-700 rounded-md text-sm bg-slate-800 text-slate-200" value={sellThreshold} onChange={e => setSellThreshold(parseFloat(e.target.value))}>
+              <option value="0.01">漲1%賣出</option>
+              <option value="0.02">漲2%賣出</option>
+              <option value="0.03">漲3%賣出</option>
+              <option value="0.05">漲5%賣出</option>
             </select>
           </div>
-          <select className="px-3 py-1.5 border border-slate-300 rounded-md text-sm bg-white" value={buyThreshold} onChange={e => setBuyThreshold(parseFloat(e.target.value))}>
-            <option value="0.01">跌1%買入</option>
-            <option value="0.02">跌2%買入</option>
-            <option value="0.03">跌3%買入</option>
-            <option value="0.05">跌5%買入</option>
-          </select>
-          <select className="px-3 py-1.5 border border-slate-300 rounded-md text-sm bg-white" value={sellThreshold} onChange={e => setSellThreshold(parseFloat(e.target.value))}>
-            <option value="0.01">漲1%賣出</option>
-            <option value="0.02">漲2%賣出</option>
-            <option value="0.03">漲3%賣出</option>
-            <option value="0.05">漲5%賣出</option>
-          </select>
         </div>
-      </div>
 
-      {/* Metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-        <MetricCard label="基準價" value={`$${metrics.basePrice.toFixed(2)}`} />
-        <MetricCard label="期末收盤" value={`$${metrics.finalPrice.toFixed(2)}`} />
-        <MetricCard label="最大投入資金" value={`$${Math.round(metrics.maxInvestedCapital).toLocaleString()}`} color="text-blue-600" />
-        <MetricCard label="期末持倉" value={`${metrics.currentPositions} 單位`} />
-        <MetricCard label="期末佔用資金" value={`$${Math.round(metrics.totalInvested).toLocaleString()}`} />
-        
-        <MetricCard label="已實現損益" value={`$${Math.round(metrics.totalRealized).toLocaleString()}`} sub={`(${metrics.realizedPct})`} color={metrics.totalRealized >= 0 ? 'text-[#a32d2d]' : 'text-[#0f6e56]'} />
-        <MetricCard label="未實現損益" value={`$${Math.round(metrics.unrealizedFinal).toLocaleString()}`} sub={`(${metrics.unrealizedPct})`} color={metrics.unrealizedFinal >= 0 ? 'text-[#a32d2d]' : 'text-[#0f6e56]'} />
-        <MetricCard label="總損益" value={`$${Math.round(metrics.totalPnL).toLocaleString()}`} sub={`(${metrics.totalPnLPct})`} color={metrics.totalPnL >= 0 ? 'text-[#a32d2d]' : 'text-[#0f6e56]'} />
-        <MetricCard label="完成筆數" value={`${metrics.completedCount} 筆`} />
-        <MetricCard label="買進持有損益(對比)" value={`$${Math.round(metrics.bhNetPnl).toLocaleString()}`} sub={`(${metrics.bhPctStr})`} color={metrics.bhNetPnl >= 0 ? 'text-[#a32d2d]' : 'text-[#0f6e56]'} />
-      </div>
+        {/* Metrics */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          <MetricCard label="基準價" value={`$${metrics.basePrice.toFixed(2)}`} />
+          <MetricCard label="期末收盤" value={`$${metrics.finalPrice.toFixed(2)}`} />
+          <MetricCard label="最大投入資金" value={`$${Math.round(metrics.maxInvestedCapital).toLocaleString()}`} color="text-blue-400" />
+          <MetricCard label="期末持倉" value={`${metrics.currentPositions} 單位`} />
+          <MetricCard label="期末佔用資金" value={`$${Math.round(metrics.totalInvested).toLocaleString()}`} />
+          
+          <MetricCard label="已實現損益" value={`$${Math.round(metrics.totalRealized).toLocaleString()}`} sub={`(${metrics.realizedPct})`} color={metrics.totalRealized >= 0 ? 'text-red-400' : 'text-green-400'} />
+          <MetricCard label="未實現損益" value={`$${Math.round(metrics.unrealizedFinal).toLocaleString()}`} sub={`(${metrics.unrealizedPct})`} color={metrics.unrealizedFinal >= 0 ? 'text-red-400' : 'text-green-400'} />
+          <MetricCard label="總損益" value={`$${Math.round(metrics.totalPnL).toLocaleString()}`} sub={`(${metrics.totalPnLPct})`} color={metrics.totalPnL >= 0 ? 'text-red-400' : 'text-green-400'} />
+          <MetricCard label="完成筆數" value={`${metrics.completedCount} 筆`} />
+          <MetricCard label="買進持有損益(對比)" value={`$${Math.round(metrics.bhNetPnl).toLocaleString()}`} sub={`(${metrics.bhPctStr})`} color={metrics.bhNetPnl >= 0 ? 'text-red-400' : 'text-green-400'} />
+        </div>
 
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-          <h3 className="text-sm font-medium text-slate-500 mb-4">價格走勢 + 進出場</h3>
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-sm">
+          <h3 className="text-sm font-medium text-slate-400 mb-4">價格走勢 + 進出場</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={priceChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" tickFormatter={d => d.substring(2)} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} minTickGap={20} />
-                <YAxis domain={['auto', 'auto']} tickFormatter={v => `$${v}`} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ fontSize: '12px', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                <Line type="monotone" dataKey="price" stroke="#378add" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-                <Scatter dataKey="buy" fill="#e24b4a" shape="triangle" isAnimationActive={false} />
-                <Scatter dataKey="sell" fill="#0f6e56" shape="square" isAnimationActive={false} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
+                <XAxis dataKey="name" tickFormatter={d => d.substring(2)} tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} minTickGap={20} />
+                <YAxis domain={['auto', 'auto']} tickFormatter={v => `$${v}`} tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ backgroundColor: '#1e293b', color: '#f1f5f9', fontSize: '12px', borderRadius: '8px', border: '1px solid #334155', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                <Line type="monotone" dataKey="price" stroke="#60a5fa" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                <Scatter dataKey="buy" fill="#f87171" shape="triangle" isAnimationActive={false} />
+                <Scatter dataKey="sell" fill="#4ade80" shape="square" isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
         </div>
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-          <h3 className="text-sm font-medium text-slate-500 mb-4">持倉單位數</h3>
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-sm">
+          <h3 className="text-sm font-medium text-slate-400 mb-4">持倉單位數</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={holdSeries} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="d" tickFormatter={d => d.substring(2)} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} minTickGap={20} />
-                <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ fontSize: '12px', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                <Area type="step" dataKey="n" stroke="#ba7517" fill="rgba(186,117,23,0.1)" strokeWidth={1.5} isAnimationActive={false} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
+                <XAxis dataKey="d" tickFormatter={d => d.substring(2)} tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} minTickGap={20} />
+                <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ backgroundColor: '#1e293b', color: '#f1f5f9', fontSize: '12px', borderRadius: '8px', border: '1px solid #334155', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                <Area type="step" dataKey="n" stroke="#fbbf24" fill="rgba(251,191,36,0.1)" strokeWidth={1.5} isAnimationActive={false} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -338,11 +339,11 @@ export default function App() {
 
       {/* Row 2 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col">
-          <h3 className="text-sm font-medium text-slate-500 mb-4">倉位明細</h3>
+        <div className="lg:col-span-2 bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-sm flex flex-col">
+          <h3 className="text-sm font-medium text-slate-400 mb-4">倉位明細</h3>
           <div className="overflow-y-auto flex-1 max-h-80">
             <table className="w-full text-xs text-left whitespace-nowrap">
-              <thead className="sticky top-0 bg-white text-slate-500 border-b border-slate-200">
+              <thead className="sticky top-0 bg-slate-800 text-slate-400 border-b border-slate-700">
                 <tr>
                   <th className="py-2 px-2 font-medium">買入日</th>
                   <th className="py-2 px-2 font-medium">買價</th>
@@ -354,7 +355,7 @@ export default function App() {
                   <th className="py-2 px-2 font-medium">狀態</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-700/50">
                 {allPos.map((pos, i) => {
                   const cost = pos.buyPrice * pos.units;
                   const sellAmt = pos.sellPrice ? pos.sellPrice * pos.units : null;
@@ -362,7 +363,7 @@ export default function App() {
                   
                   let pnlTxt;
                   if (isClosed) {
-                    const pnlColor = pos.pnl >= 0 ? 'text-[#a32d2d]' : 'text-[#0f6e56]';
+                    const pnlColor = pos.pnl >= 0 ? 'text-red-400' : 'text-green-400';
                     const sign = pos.pnl >= 0 ? '+' : '';
                     pnlTxt = <span className={pnlColor}>{sign}${Math.round(pos.pnl).toLocaleString()} <span className="text-[10px]">({pos.pct}%)</span></span>;
                   } else {
@@ -372,22 +373,22 @@ export default function App() {
                     const estNetPnl = estGross - estBuyFee - estSellFee;
                     const estPct = (estNetPnl / cost * 100).toFixed(2);
                     const sign = estNetPnl >= 0 ? '+' : '';
-                    pnlTxt = <span className="text-slate-500">浮{sign}${Math.round(estNetPnl).toLocaleString()} <span className="text-[10px]">({estPct}%)</span></span>;
+                    pnlTxt = <span className="text-slate-400">浮{sign}${Math.round(estNetPnl).toLocaleString()} <span className="text-[10px]">({estPct}%)</span></span>;
                   }
 
                   return (
-                    <tr key={i} className="hover:bg-slate-50">
+                    <tr key={i} className="hover:bg-slate-700/50">
                       <td className="py-2 px-2">{pos.buyDate.substring(5)}</td>
                       <td className="py-2 px-2">${pos.buyPrice.toFixed(2)}</td>
                       <td className="py-2 px-2">${Math.round(cost).toLocaleString()}</td>
-                      <td className="py-2 px-2">{isClosed ? pos.sellDate.substring(5) : <span className="text-slate-400">—</span>}</td>
-                      <td className="py-2 px-2">{isClosed ? `$${pos.sellPrice.toFixed(2)}` : <span className="text-slate-400">—</span>}</td>
-                      <td className="py-2 px-2">{isClosed ? `$${Math.round(sellAmt!).toLocaleString()}` : <span className="text-slate-400">—</span>}</td>
+                      <td className="py-2 px-2">{isClosed ? pos.sellDate.substring(5) : <span className="text-slate-500">—</span>}</td>
+                      <td className="py-2 px-2">{isClosed ? `$${pos.sellPrice.toFixed(2)}` : <span className="text-slate-500">—</span>}</td>
+                      <td className="py-2 px-2">{isClosed ? `$${Math.round(sellAmt!).toLocaleString()}` : <span className="text-slate-500">—</span>}</td>
                       <td className="py-2 px-2">{pnlTxt}</td>
                       <td className="py-2 px-2">
                         {isClosed ? 
-                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#fcebeb] text-[#a32d2d]">已平倉</span> : 
-                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#eaf3de] text-[#3b6d11]">持倉中</span>
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-900/30 text-red-400">已平倉</span> : 
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-900/30 text-green-400">持倉中</span>
                         }
                       </td>
                     </tr>
@@ -398,18 +399,18 @@ export default function App() {
           </div>
         </div>
         
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col">
-          <h3 className="text-sm font-medium text-slate-500 mb-4">月損益</h3>
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-sm flex flex-col">
+          <h3 className="text-sm font-medium text-slate-400 mb-4">月損益</h3>
           <div className="flex-1 min-h-[250px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={v => `$${Math.round(v/1000)}k`} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{ fontSize: '12px', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
+                <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={v => `$${Math.round(v/1000)}k`} tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <Tooltip cursor={{fill: '#334155'}} contentStyle={{ backgroundColor: '#1e293b', color: '#f1f5f9', fontSize: '12px', borderRadius: '8px', border: '1px solid #334155', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                 <Bar dataKey="pnl" radius={[4, 4, 0, 0]} isAnimationActive={false}>
                   {monthlyData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.pnl >= 0 ? 'rgba(163,45,45,0.8)' : 'rgba(15,110,86,0.8)'} />
+                    <Cell key={`cell-${index}`} fill={entry.pnl >= 0 ? '#f87171' : '#4ade80'} />
                   ))}
                 </Bar>
               </BarChart>
@@ -419,11 +420,11 @@ export default function App() {
       </div>
 
       {/* Log Table */}
-      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-        <h3 className="text-sm font-medium text-slate-500 mb-4">每日事件日誌</h3>
+      <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-sm">
+        <h3 className="text-sm font-medium text-slate-400 mb-4">每日事件日誌</h3>
         <div className="overflow-y-auto max-h-64">
           <table className="w-full text-xs text-left whitespace-nowrap">
-            <thead className="sticky top-0 bg-white text-slate-500 border-b border-slate-200">
+            <thead className="sticky top-0 bg-slate-800 text-slate-400 border-b border-slate-700">
               <tr>
                 <th className="py-2 px-2 font-medium">日期</th>
                 <th className="py-2 px-2 font-medium">收盤價</th>
@@ -436,21 +437,21 @@ export default function App() {
                 <th className="py-2 px-2 font-medium">備註</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-700/50">
               {dailyLog.map((l, i) => {
                 const isB = l.action.includes('買');
                 const isS = l.action.includes('賣');
                 
                 let actionTag;
-                if (l.action === '買入') actionTag = <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#e6f1fb] text-[#185fa5]">買入</span>;
-                else if (l.action === '賣出') actionTag = <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#fcebeb] text-[#a32d2d]">賣出</span>;
-                else actionTag = <><span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#e6f1fb] text-[#185fa5]">買</span> <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#fcebeb] text-[#a32d2d]">賣</span></>;
+                if (l.action === '買入') actionTag = <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-900/30 text-blue-400">買入</span>;
+                else if (l.action === '賣出') actionTag = <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-900/30 text-red-400">賣出</span>;
+                else actionTag = <><span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-900/30 text-blue-400">買</span> <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-900/30 text-red-400">賣</span></>;
 
                 const units = isB && !isS ? `+${l.buyUnits}` : !isB && isS ? `-${l.sellUnits}` : `+${l.buyUnits}/-${l.sellUnits}`;
                 const avgP = l.avgBuy && l.avgSell ? `買$${l.avgBuy.toFixed(2)}/賣$${l.avgSell.toFixed(2)}` : l.avgBuy ? `$${l.avgBuy.toFixed(2)}` : `$${l.avgSell.toFixed(2)}`;
                 
-                const stepPnlColor = l.stepPnl > 0 ? 'text-[#a32d2d]' : l.stepPnl < 0 ? 'text-[#0f6e56]' : '';
-                const cumPnlColor = l.cumPnl >= 0 ? 'text-[#a32d2d]' : 'text-[#0f6e56]';
+                const stepPnlColor = l.stepPnl > 0 ? 'text-red-400' : l.stepPnl < 0 ? 'text-green-400' : '';
+                const cumPnlColor = l.cumPnl >= 0 ? 'text-red-400' : 'text-green-400';
                 
                 let stepPct = '';
                 if (l.stepPnl && l.avgSell) {
@@ -460,16 +461,16 @@ export default function App() {
                 }
 
                 return (
-                  <tr key={i} className="hover:bg-slate-50">
+                  <tr key={i} className="hover:bg-slate-700/50">
                     <td className="py-2 px-2">{l.d}</td>
                     <td className="py-2 px-2">${l.p.toFixed(2)}</td>
                     <td className="py-2 px-2">{actionTag}</td>
-                    <td className="py-2 px-2 text-slate-500">{units}</td>
+                    <td className="py-2 px-2 text-slate-400">{units}</td>
                     <td className="py-2 px-2">{avgP}</td>
                     <td className={`py-2 px-2 ${stepPnlColor}`}>{l.stepPnl ? `${l.stepPnl > 0 ? '+' : ''}$${Math.round(l.stepPnl).toLocaleString()}${stepPct}` : '—'}</td>
                     <td className={`py-2 px-2 ${cumPnlColor}`}>${Math.round(l.cumPnl).toLocaleString()}</td>
                     <td className="py-2 px-2">{l.holdUnits}</td>
-                    <td className="py-2 px-2 text-[11px] text-slate-500 truncate max-w-[200px]" title={l.notes}>{l.notes}</td>
+                    <td className="py-2 px-2 text-[11px] text-slate-400 truncate max-w-[200px]" title={l.notes}>{l.notes}</td>
                   </tr>
                 );
               })}
@@ -478,8 +479,9 @@ export default function App() {
         </div>
       </div>
       
-      <div className="text-[11px] text-slate-400 mt-2">
+      <div className="text-[11px] text-slate-500 mt-2">
         每單位=100股。總交易成本率 0.37125% (買進 0.035625% + 賣出 0.035625% + 證交稅 0.3%)。價格為近似重建值，僅供策略邏輯驗證，非投資建議。
+      </div>
       </div>
     </div>
   );
