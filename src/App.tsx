@@ -74,6 +74,12 @@ export default function App() {
     let lastMonth = '';
     const indDailyLog: any[] = [];
 
+    // Independent Blue Light Only Strategy
+    let blueOnlyUnits = 0;
+    let blueOnlyInvested = 0;
+    let blueOnlyBuyCount = 0;
+    const blueOnlyBuyPts: any[] = [];
+
     let availableCapital = TOTAL_CAPITAL;
     let minAvailableCapital = TOTAL_CAPITAL;
 
@@ -84,6 +90,21 @@ export default function App() {
       if (lastMonth !== '' && currentMonth !== lastMonth) {
         const indicator = INDICATOR_DATA[lastMonth];
         if (indicator) {
+          // Independent Blue Light Strategy Logic
+          if (indicator.light === '藍燈') {
+            const blueBuyAmount = 100000;
+            const blueUnitsToBuy = Math.floor(blueBuyAmount / p);
+            if (blueUnitsToBuy > 0) {
+              const cost = blueUnitsToBuy * p;
+              const fee = cost * BUY_FEE_RATE;
+              blueOnlyUnits += blueUnitsToBuy;
+              blueOnlyInvested += (cost + fee);
+              blueOnlyBuyCount++;
+              blueOnlyBuyPts.push({ x: i, y: p, d, units: blueUnitsToBuy });
+            }
+          }
+
+          // Shared Capital Indicator Strategy Logic
           if (indicator.light === '藍燈') {
             const targetAmount = TOTAL_CAPITAL / 10;
             const costPerUnit = p * (1 + BUY_FEE_RATE);
@@ -339,6 +360,22 @@ export default function App() {
       invested: indUnits * indAvgCost,
     };
 
+    // Blue Light Only Metrics
+    const blueOnlyGrossValue = blueOnlyUnits * finalP;
+    const blueOnlyEstSellFee = blueOnlyGrossValue * SELL_FEE_TAX_RATE;
+    const blueOnlyNetValue = blueOnlyGrossValue - blueOnlyEstSellFee;
+    const blueOnlyTotalPnL = blueOnlyNetValue - blueOnlyInvested;
+    const blueOnlyRoi = blueOnlyInvested > 0 ? ((blueOnlyTotalPnL / blueOnlyInvested) * 100).toFixed(2) + '%' : '0.00%';
+
+    const blueOnlyMetrics = {
+      units: blueOnlyUnits,
+      invested: blueOnlyInvested,
+      buyCount: blueOnlyBuyCount,
+      finalValue: blueOnlyNetValue,
+      totalPnL: blueOnlyTotalPnL,
+      roi: blueOnlyRoi
+    };
+
     const metrics = {
       baseDate: base.d,
       basePrice: base.p,
@@ -363,6 +400,7 @@ export default function App() {
       const isSell = sellPts.find(s => s.x === i);
       const isIndBuy = indBuyPts.find(b => b.x === i);
       const isIndSell = indSellPts.find(s => s.x === i);
+      const isBlueOnlyBuy = blueOnlyBuyPts.find(b => b.x === i);
       return {
         name: d.d,
         price: d.p,
@@ -370,6 +408,7 @@ export default function App() {
         sell: isSell ? d.p : null,
         indBuy: isIndBuy ? d.p : null,
         indSell: isIndSell ? d.p : null,
+        blueOnlyBuy: isBlueOnlyBuy ? d.p : null,
       };
     });
 
@@ -392,12 +431,12 @@ export default function App() {
       .filter(k => k >= `${Math.min(parseInt(startYear), parseInt(endYear))}-01` && k <= `${Math.max(parseInt(startYear), parseInt(endYear))}-12`)
       .map(k => ({ month: k, ...INDICATOR_DATA[k] }));
 
-    return { metrics, priceChartData, holdSeries, monthlyData, allPos, dailyLog: processedDailyLog, finalP, indicatorRange, indMetrics, indDailyLog: indDailyLog.reverse() };
+    return { metrics, priceChartData, holdSeries, monthlyData, allPos, dailyLog: processedDailyLog, finalP, indicatorRange, indMetrics, indDailyLog: indDailyLog.reverse(), blueOnlyMetrics };
   }, [startYear, endYear, buyThreshold, sellThreshold]);
 
   if (!simResult) return <div className="p-8 text-center text-slate-400 min-h-screen bg-slate-900">資料不足</div>;
 
-  const { metrics, priceChartData, holdSeries, monthlyData, allPos, dailyLog, indicatorRange, indMetrics, indDailyLog } = simResult;
+  const { metrics, priceChartData, holdSeries, monthlyData, allPos, dailyLog, indicatorRange, indMetrics, indDailyLog, blueOnlyMetrics } = simResult;
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-200 font-sans">
@@ -472,6 +511,19 @@ export default function App() {
           </div>
         </div>
 
+        {/* Blue Light Only Metrics */}
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-sm mb-4">
+          <h3 className="text-sm font-medium text-slate-400 mb-3">純藍燈買進持有策略 (獨立資金：每次買10萬，不賣出)</h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <MetricCard label="總投入資金" value={`$${Math.round(blueOnlyMetrics.invested).toLocaleString()}`} color="text-blue-400" />
+            <MetricCard label="累積持倉" value={`${blueOnlyMetrics.units} 股`} />
+            <MetricCard label="買入次數" value={`${blueOnlyMetrics.buyCount} 次`} />
+            <MetricCard label="期末總值" value={`$${Math.round(blueOnlyMetrics.finalValue).toLocaleString()}`} />
+            <MetricCard label="總損益" value={`$${Math.round(blueOnlyMetrics.totalPnL).toLocaleString()}`} color={blueOnlyMetrics.totalPnL >= 0 ? 'text-red-400' : 'text-green-400'} />
+            <MetricCard label="報酬率" value={blueOnlyMetrics.roi} color={blueOnlyMetrics.totalPnL >= 0 ? 'text-red-400' : 'text-green-400'} />
+          </div>
+        </div>
+
         {/* Indicators */}
         <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-sm">
           <h3 className="text-sm font-medium text-slate-400 mb-4">景氣對策燈號 ({Math.min(parseInt(startYear), parseInt(endYear))} - {Math.max(parseInt(startYear), parseInt(endYear))})</h3>
@@ -502,6 +554,7 @@ export default function App() {
                 <Scatter dataKey="sell" fill="#4ade80" shape="square" isAnimationActive={false} name="網格賣" />
                 <Scatter dataKey="indBuy" fill="#3b82f6" shape="triangle" isAnimationActive={false} name="燈號買" />
                 <Scatter dataKey="indSell" fill="#f97316" shape="square" isAnimationActive={false} name="燈號賣" />
+                <Scatter dataKey="blueOnlyBuy" fill="#a855f7" shape="star" isAnimationActive={false} name="純藍燈買" />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
