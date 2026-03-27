@@ -14,29 +14,11 @@ const BUY_FEE_RATE = 0.00035625;
 const SELL_FEE_TAX_RATE = 0.00335625;
 const UNITS = 100;
 
-function getRangeData(range: string) {
-  const last = ALL_DATA[ALL_DATA.length - 1].d;
-  let from = '2025-01-01';
-  let to = '2025-12-31';
-  
-  if (range === 'all') { from = '2025-01-01'; to = '2025-12-31'; }
-  else if (range === 'q1') { from = '2025-01-01'; to = '2025-03-31'; }
-  else if (range === 'q2') { from = '2025-04-01'; to = '2025-06-30'; }
-  else if (range === 'q3') { from = '2025-07-01'; to = '2025-09-30'; }
-  else if (range === 'q4') { from = '2025-10-01'; to = '2025-12-31'; }
-  else if (range === 'h1') { from = '2025-01-01'; to = '2025-06-30'; }
-  else if (range === 'h2') { from = '2025-07-01'; to = '2025-12-31'; }
-  else if (range === '3m') {
-    const idx = ALL_DATA.length - 1;
-    from = ALL_DATA[Math.max(0, idx - 65)].d;
-    to = last;
-  }
-  else if (range === '6m') {
-    const idx = ALL_DATA.length - 1;
-    from = ALL_DATA[Math.max(0, idx - 130)].d;
-    to = last;
-  }
-  
+function getRangeData(startYear: string, endYear: string) {
+  const s = Math.min(parseInt(startYear), parseInt(endYear));
+  const e = Math.max(parseInt(startYear), parseInt(endYear));
+  const from = `${s}-01-01`;
+  const to = `${e}-12-31`;
   return ALL_DATA.filter(x => x.d >= from && x.d <= to);
 }
 
@@ -53,12 +35,13 @@ function MetricCard({ label, value, sub, color = 'text-slate-900' }: { label: st
 }
 
 export default function App() {
-  const [range, setRange] = useState('all');
+  const [startYear, setStartYear] = useState('2020');
+  const [endYear, setEndYear] = useState('2026');
   const [buyThreshold, setBuyThreshold] = useState(0.01);
   const [sellThreshold, setSellThreshold] = useState(0.01);
 
   const simResult = useMemo(() => {
-    const rangeData = getRangeData(range);
+    const rangeData = getRangeData(startYear, endYear);
     if (rangeData.length < 2) return null;
 
     const baseIdx = ALL_DATA.findIndex(x => x.d === rangeData[0].d);
@@ -76,12 +59,14 @@ export default function App() {
     let noPosiHighWater = base.p;
     let totalRealized = 0;
     let totalCostPaid = 0;
+    let maxInvestedCapital = 0;
 
     for (let i = 0; i < rangeData.length; i++) {
       const { d, p } = rangeData[i];
       let dayBuys: number[] = [];
       let daySells: any[] = [];
       let dayNotes: string[] = [];
+      let dayBuyIds: number[] = [];
       let stepPnl = 0;
 
       const hasPos = positions.length > 0;
@@ -89,21 +74,25 @@ export default function App() {
         noPosiHighWater = Math.max(noPosiHighWater, p);
         const drop = (noPosiHighWater - p) / noPosiHighWater;
         if (drop >= buyThreshold) {
-          positions.push({ id: ++posId, buyDate: d, buyPrice: p, units: UNITS });
+          const newPosId = ++posId;
+          positions.push({ id: newPosId, buyDate: d, buyPrice: p, units: UNITS });
           lastBuyRef = p;
           noPosiHighWater = p;
           dayBuys.push(p);
+          dayBuyIds.push(newPosId);
           buyPts.push({ x: i, y: p, d });
-          dayNotes.push('空倉高點回跌觸發');
+          dayNotes.push(`空倉高點回跌觸發 (#${newPosId})`);
         }
       } else {
         const drop = (lastBuyRef - p) / lastBuyRef;
         if (drop >= buyThreshold) {
-          positions.push({ id: ++posId, buyDate: d, buyPrice: p, units: UNITS });
+          const newPosId = ++posId;
+          positions.push({ id: newPosId, buyDate: d, buyPrice: p, units: UNITS });
           lastBuyRef = p;
           dayBuys.push(p);
+          dayBuyIds.push(newPosId);
           buyPts.push({ x: i, y: p, d });
-          dayNotes.push('跌幅達門檻加碼');
+          dayNotes.push(`跌幅達門檻加碼 (#${newPosId})`);
         }
       }
 
@@ -132,6 +121,9 @@ export default function App() {
       }
       positions = kept;
       
+      const currentInvested = positions.reduce((sum, pos) => sum + pos.buyPrice * pos.units, 0);
+      maxInvestedCapital = Math.max(maxInvestedCapital, currentInvested);
+      
       if (positions.length > 0) {
         lastBuyRef = Math.min(...positions.map(x => x.buyPrice));
       } else {
@@ -152,7 +144,8 @@ export default function App() {
           sellUnits: daySells.length * UNITS,
           avgBuy, avgSell, stepPnl, cumPnl: totalRealized, 
           holdUnits: positions.length * UNITS, 
-          notes: dayNotes.join(' | ')
+          notes: dayNotes.join(' | '),
+          buyPosIds: dayBuyIds
         });
       }
     }
@@ -167,24 +160,65 @@ export default function App() {
     
     const totalPnL = totalRealized + unrealizedFinal;
     const totalInvested = positions.reduce((s, pos) => pos.buyPrice * pos.units + s, 0);
-    const totalCostRealized = completedPos.reduce((s, c) => s + c.buyPrice * c.units, 0);
-    const realizedPct = totalCostRealized > 0 ? ((totalRealized / totalCostRealized) * 100).toFixed(2) + '%' : '—';
-    const totalCostAll = totalCostRealized + totalInvested;
-    const totalPnLPct = totalCostAll > 0 ? ((totalPnL / totalCostAll) * 100).toFixed(2) + '%' : '—';
+    
+    const denom = maxInvestedCapital > 0 ? maxInvestedCapital : 1;
+    const realizedPct = maxInvestedCapital > 0 ? ((totalRealized / denom) * 100).toFixed(2) + '%' : '—';
+    const unrealizedPct = maxInvestedCapital > 0 ? ((unrealizedFinal / denom) * 100).toFixed(2) + '%' : '—';
+    const totalPnLPct = maxInvestedCapital > 0 ? ((totalPnL / denom) * 100).toFixed(2) + '%' : '—';
+
+    const bhUnits = maxInvestedCapital > 0 ? maxInvestedCapital / base.p : 0;
+    const bhBuyFee = maxInvestedCapital * BUY_FEE_RATE;
+    const bhGrossValue = bhUnits * finalP;
+    const bhSellFee = bhGrossValue * SELL_FEE_TAX_RATE;
+    const bhNetPnl = maxInvestedCapital > 0 ? bhGrossValue - maxInvestedCapital - bhBuyFee - bhSellFee : 0;
+    const bhPct = maxInvestedCapital > 0 ? (bhNetPnl / maxInvestedCapital) * 100 : 0;
+    const bhPctStr = maxInvestedCapital > 0 ? bhPct.toFixed(2) + '%' : '—';
+
+    const openPosMap = new Map(positions.map(pos => {
+      const gross = (finalP - pos.buyPrice) * pos.units;
+      const buyFee = pos.buyPrice * pos.units * BUY_FEE_RATE;
+      const estSellFee = finalP * pos.units * SELL_FEE_TAX_RATE;
+      return [pos.id, gross - buyFee - estSellFee];
+    }));
+
+    const processedDailyLog = dailyLog.map(log => {
+      if (log.buyPosIds && log.buyPosIds.length > 0) {
+        const updatedNotes = log.notes.split(' | ').map((note: string) => {
+          const match = note.match(/\(#(\d+)\)/);
+          if (match) {
+            const id = parseInt(match[1]);
+            if (openPosMap.has(id)) {
+              const pnl = openPosMap.get(id)!;
+              const sign = pnl >= 0 ? '+' : '';
+              return `${note.replace(` (#${id})`, '')} (目前未平倉損益: ${sign}$${Math.round(pnl)})`;
+            } else {
+              return note.replace(` (#${id})`, '');
+            }
+          }
+          return note;
+        }).join(' | ');
+        return { ...log, notes: updatedNotes };
+      }
+      return log;
+    }).reverse();
 
     const metrics = {
+      baseDate: base.d,
       basePrice: base.p,
       finalPrice: finalP,
       totalRealized,
       realizedPct,
       unrealizedFinal,
-      unrealizedPct: totalInvested > 0 ? ((unrealizedFinal / totalInvested) * 100).toFixed(2) + '%' : '—',
+      unrealizedPct,
       totalPnL,
       totalPnLPct,
       completedCount: completedPos.length,
       currentPositions: positions.length,
       totalInvested,
-      totalCostPaid
+      maxInvestedCapital,
+      totalCostPaid,
+      bhNetPnl,
+      bhPctStr
     };
 
     const priceChartData = rangeData.map((d, i) => {
@@ -204,7 +238,7 @@ export default function App() {
       monthPnL[m] = (monthPnL[m] || 0) + c.pnl;
     });
     const monthlyData = Object.keys(monthPnL).sort().map(k => ({
-      month: k.substring(5) + '月',
+      month: k,
       pnl: monthPnL[k]
     }));
 
@@ -213,8 +247,8 @@ export default function App() {
       ...positions.map(p => ({ ...p, sellDate: null, sellPrice: null, pnl: null, pct: null }))
     ].sort((a, b) => a.buyDate.localeCompare(b.buyDate));
 
-    return { metrics, priceChartData, holdSeries, monthlyData, allPos, dailyLog: dailyLog.reverse(), finalP };
-  }, [range, buyThreshold, sellThreshold]);
+    return { metrics, priceChartData, holdSeries, monthlyData, allPos, dailyLog: processedDailyLog, finalP };
+  }, [startYear, endYear, buyThreshold, sellThreshold]);
 
   if (!simResult) return <div className="p-8 text-center text-slate-500">資料不足</div>;
 
@@ -226,20 +260,18 @@ export default function App() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-xl font-medium mb-1">00631L 網格交易回測 v3 (含交易成本)</h1>
-          <p className="text-sm text-slate-500">每單位100股 · 基準 2024/12/31 收盤 $247.85 · 總成本率 0.37125%</p>
+          <p className="text-sm text-slate-500">每單位100股 · 基準 {metrics.baseDate} 收盤 ${metrics.basePrice.toFixed(2)} · 總成本率 0.37125%</p>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
-          <select className="px-3 py-1.5 border border-slate-300 rounded-md text-sm bg-white" value={range} onChange={e => setRange(e.target.value)}>
-            <option value="all">全年 2025</option>
-            <option value="q1">Q1 (1–3月)</option>
-            <option value="q2">Q2 (4–6月)</option>
-            <option value="q3">Q3 (7–9月)</option>
-            <option value="q4">Q4 (10–12月)</option>
-            <option value="h1">上半年 (1–6月)</option>
-            <option value="h2">下半年 (7–12月)</option>
-            <option value="3m">最近3個月</option>
-            <option value="6m">最近6個月</option>
-          </select>
+          <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-md px-2">
+            <select className="py-1.5 text-sm bg-transparent outline-none cursor-pointer" value={startYear} onChange={e => setStartYear(e.target.value)}>
+              {['2020','2021','2022','2023','2024','2025','2026'].map(y => <option key={y} value={y}>{y}年</option>)}
+            </select>
+            <span className="text-slate-400 text-sm">至</span>
+            <select className="py-1.5 text-sm bg-transparent outline-none cursor-pointer" value={endYear} onChange={e => setEndYear(e.target.value)}>
+              {['2020','2021','2022','2023','2024','2025','2026'].map(y => <option key={y} value={y}>{y}年</option>)}
+            </select>
+          </div>
           <select className="px-3 py-1.5 border border-slate-300 rounded-md text-sm bg-white" value={buyThreshold} onChange={e => setBuyThreshold(parseFloat(e.target.value))}>
             <option value="0.01">跌1%買入</option>
             <option value="0.02">跌2%買入</option>
@@ -256,15 +288,18 @@ export default function App() {
       </div>
 
       {/* Metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         <MetricCard label="基準價" value={`$${metrics.basePrice.toFixed(2)}`} />
         <MetricCard label="期末收盤" value={`$${metrics.finalPrice.toFixed(2)}`} />
+        <MetricCard label="最大投入資金" value={`$${Math.round(metrics.maxInvestedCapital).toLocaleString()}`} color="text-blue-600" />
+        <MetricCard label="期末持倉" value={`${metrics.currentPositions} 單位`} />
+        <MetricCard label="期末佔用資金" value={`$${Math.round(metrics.totalInvested).toLocaleString()}`} />
+        
         <MetricCard label="已實現損益" value={`$${Math.round(metrics.totalRealized).toLocaleString()}`} sub={`(${metrics.realizedPct})`} color={metrics.totalRealized >= 0 ? 'text-[#a32d2d]' : 'text-[#0f6e56]'} />
         <MetricCard label="未實現損益" value={`$${Math.round(metrics.unrealizedFinal).toLocaleString()}`} sub={`(${metrics.unrealizedPct})`} color={metrics.unrealizedFinal >= 0 ? 'text-[#a32d2d]' : 'text-[#0f6e56]'} />
         <MetricCard label="總損益" value={`$${Math.round(metrics.totalPnL).toLocaleString()}`} sub={`(${metrics.totalPnLPct})`} color={metrics.totalPnL >= 0 ? 'text-[#a32d2d]' : 'text-[#0f6e56]'} />
         <MetricCard label="完成筆數" value={`${metrics.completedCount} 筆`} />
-        <MetricCard label="期末持倉" value={`${metrics.currentPositions} 單位`} />
-        <MetricCard label="佔用資金" value={`$${Math.round(metrics.totalInvested).toLocaleString()}`} />
+        <MetricCard label="買進持有損益(對比)" value={`$${Math.round(metrics.bhNetPnl).toLocaleString()}`} sub={`(${metrics.bhPctStr})`} color={metrics.bhNetPnl >= 0 ? 'text-[#a32d2d]' : 'text-[#0f6e56]'} />
       </div>
 
       {/* Charts Row 1 */}
@@ -275,7 +310,7 @@ export default function App() {
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={priceChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" tickFormatter={d => d.substring(5)} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} minTickGap={20} />
+                <XAxis dataKey="name" tickFormatter={d => d.substring(2)} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} minTickGap={20} />
                 <YAxis domain={['auto', 'auto']} tickFormatter={v => `$${v}`} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
                 <Tooltip contentStyle={{ fontSize: '12px', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                 <Line type="monotone" dataKey="price" stroke="#378add" strokeWidth={1.5} dot={false} isAnimationActive={false} />
@@ -291,7 +326,7 @@ export default function App() {
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={holdSeries} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="d" tickFormatter={d => d.substring(5)} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} minTickGap={20} />
+                <XAxis dataKey="d" tickFormatter={d => d.substring(2)} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} minTickGap={20} />
                 <YAxis tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
                 <Tooltip contentStyle={{ fontSize: '12px', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                 <Area type="step" dataKey="n" stroke="#ba7517" fill="rgba(186,117,23,0.1)" strokeWidth={1.5} isAnimationActive={false} />
